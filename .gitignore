@@ -1,0 +1,83 @@
+node_modules
+.pnp
+.pnp.js
+.yarn/
+
+*.tsbuildinfo
+
+dist/
+build/
+out/
+.next/
+.turbo
+
+coverage/
+*.log
+.nyc_output/
+
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
+wallet.json            # Solana кошелек
+
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store              # macOS metadata (иконки, позиции окон)
+
+Thumbs.db              # Windows thumbnails
+Desktop.ini            # Windows folder settings
+$RECYCLE.BIN/          # Windows recycle bin
+
+# RUST / ANCHOR (для Solana смарт-контрактов)
+target/                # Скомпилированный Rust код
+**/*.rs.bk             # Backup файлы Rust
+*.pdb                  # Debug symbols
+Cargo.lock             # Зависимости Rust (в библиотеках не коммитят)
+.anchor/               # Anchor cache и build artifacts
+.solana/               # Solana CLI cache
+test-ledger/           # Локальный Solana validator
+
+*.dmg
+*.app
+*.exe
+*.msi
+*.deb
+*.rpm
+*.AppImage
+
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+.ipfs/
+ipfs-repo/
+.helia/
+
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+tmp/
+temp/
+*.tmp
+.cache/
+
+docs/.vuepress/dist/
+docs/.docusaurus/
+
+!.vscode/extensions.json
+!.vscode/settings.json
