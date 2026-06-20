@@ -133,7 +133,15 @@ const App: React.FC = () => {
           next[peerId] = filtered;
           if (filtered.length !== msgs.length) changed = true;
         }
-        return changed ? next : prev;
+        if (!changed) return prev;
+        setContacts(prevContacts => prevContacts.map(c => {
+          const prevLen = (prev[c.peerId] ?? []).length;
+          const remaining = next[c.peerId] ?? [];
+          if (remaining.length === prevLen) return c;
+          const lastMsg = remaining[remaining.length - 1];
+          return { ...c, lastMessage: lastMsg?.text, lastTime: lastMsg?.timestamp };
+        }));
+        return next;
       });
     }, 1000);
     return () => clearInterval(id);
