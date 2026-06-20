@@ -30,10 +30,9 @@ export interface MessageItem {
 // TTL options: label → seconds (0 = never)
 const TTL_OPTIONS = [
   { label: '∞', seconds: 0 },
+  { label: '10с', seconds: 10 },
+  { label: '20с', seconds: 20 },
   { label: '30с', seconds: 30 },
-  { label: '5м', seconds: 300 },
-  { label: '1ч', seconds: 3600 },
-  { label: '24ч', seconds: 86400 },
 ] as const;
 
 type View = 'chat' | 'settings' | 'demo';
