@@ -81,3 +81,6 @@ docs/.docusaurus/
 
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Контекстный файл для генерации отчёта ИИ — не коммитить
+AI_REPORT_CONTEXT.md

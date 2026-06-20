@@ -23,8 +23,18 @@ export interface MessageItem {
   encryptedB64: string;
   cid: string;
   timestamp: number;
+  expiresAt?: number;
   sender: 'me' | 'them';
 }
+
+// TTL options: label → seconds (0 = never)
+const TTL_OPTIONS = [
+  { label: '∞', seconds: 0 },
+  { label: '30с', seconds: 30 },
+  { label: '5м', seconds: 300 },
+  { label: '1ч', seconds: 3600 },
+  { label: '24ч', seconds: 86400 },
+] as const;
 
 type View = 'chat' | 'settings' | 'demo';
 
@@ -42,6 +52,8 @@ const App: React.FC = () => {
   const [showRawMsg, setShowRawMsg] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [ttlSeconds, setTtlSeconds] = useState(0);
+  const [now, setNow] = useState(Date.now());
   const channelRef = useRef<P2PChannel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -83,6 +95,7 @@ const App: React.FC = () => {
         encryptedB64: msg.encryptedB64,
         cid: msg.cid,
         timestamp: msg.timestamp,
+        expiresAt: msg.expiresAt,
         sender: 'them',
       };
 
@@ -106,6 +119,27 @@ const App: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selected]);
 
+  // Tick every second to update countdown timers and purge expired messages
+  useEffect(() => {
+    const hasExpiring = Object.values(messages).flat().some(m => m.expiresAt);
+    if (!hasExpiring) return;
+    const id = setInterval(() => {
+      const ts = Date.now();
+      setNow(ts);
+      setMessages(prev => {
+        const next: Record<string, MessageItem[]> = {};
+        let changed = false;
+        for (const [peerId, msgs] of Object.entries(prev)) {
+          const filtered = msgs.filter(m => !m.expiresAt || m.expiresAt > ts);
+          next[peerId] = filtered;
+          if (filtered.length !== msgs.length) changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [messages]);
+
   const send = () => {
     if (!input.trim() || !selected || !identity || !channelRef.current) return;
     const contact = contacts.find(c => c.peerId === selected);
@@ -117,12 +151,16 @@ const App: React.FC = () => {
       fromHex(identity.secretKeyHex),
     );
 
+    const ts = Date.now();
+    const expiresAt = ttlSeconds > 0 ? ts + ttlSeconds * 1000 : undefined;
+
     const item: MessageItem = {
-      id: `me-${Date.now()}`,
+      id: `me-${ts}`,
       text: input.trim(),
       encryptedB64,
       cid,
-      timestamp: Date.now(),
+      timestamp: ts,
+      expiresAt,
       sender: 'me',
     };
 
@@ -132,7 +170,8 @@ const App: React.FC = () => {
       nonceB64,
       senderPublicKeyHex: identity.publicKeyHex,
       cid,
-      timestamp: item.timestamp,
+      timestamp: ts,
+      expiresAt,
     });
 
     setMessages(prev => ({ ...prev, [selected]: [...(prev[selected] ?? []), item] }));
@@ -304,45 +343,74 @@ const App: React.FC = () => {
                   <div className="no-msg-sub">Начните диалог — никто кроме вас не прочитает</div>
                 </div>
               )}
-              {currentMessages.map(m => (
-                <div key={m.id} className={`msg-row ${m.sender}`}>
-                  <div className="bubble-wrap">
-                    <div className="bubble">{m.text}</div>
-                    <div className="bubble-meta">
-                      <span className="bubble-time">{formatTime(m.timestamp)}</span>
-                      <span
-                        className="bubble-cid"
-                        title={`IPFS CID: ${m.cid}`}
-                        onClick={() => setShowRawMsg(showRawMsg === m.id ? null : m.id)}
-                      >
-                        🌐 IPFS
-                      </span>
-                      <span className="bubble-e2ee">🔒 E2EE</span>
-                    </div>
-                    {showRawMsg === m.id && (
-                      <div className="raw-msg-panel">
-                        <div className="raw-label">CID (IPFS)</div>
-                        <div className="raw-value">{m.cid}</div>
-                        <div className="raw-label">Зашифровано (Base64, XSalsa20)</div>
-                        <div className="raw-value">{m.encryptedB64.slice(0, 64)}…</div>
+              {currentMessages.map(m => {
+                const secsLeft = m.expiresAt ? Math.max(0, Math.ceil((m.expiresAt - now) / 1000)) : null;
+                const isUrgent = secsLeft !== null && secsLeft <= 10;
+                return (
+                  <div key={m.id} className={`msg-row ${m.sender}`}>
+                    <div className="bubble-wrap">
+                      <div className={`bubble ${isUrgent ? 'expiring' : ''}`}>{m.text}</div>
+                      <div className="bubble-meta">
+                        <span className="bubble-time">{formatTime(m.timestamp)}</span>
+                        {secsLeft !== null && (
+                          <span className={`bubble-ttl ${isUrgent ? 'urgent' : ''}`} title="Сообщение самоуничтожится">
+                            ⏱ {secsLeft < 60 ? `${secsLeft}с` : secsLeft < 3600 ? `${Math.ceil(secsLeft / 60)}м` : `${Math.ceil(secsLeft / 3600)}ч`}
+                          </span>
+                        )}
+                        <span
+                          className="bubble-cid"
+                          title={`IPFS CID: ${m.cid}`}
+                          onClick={() => setShowRawMsg(showRawMsg === m.id ? null : m.id)}
+                        >
+                          🌐 IPFS
+                        </span>
+                        <span className="bubble-e2ee">🔒 E2EE</span>
                       </div>
-                    )}
+                      {showRawMsg === m.id && (
+                        <div className="raw-msg-panel">
+                          <div className="raw-label">CID (IPFS)</div>
+                          <div className="raw-value">{m.cid}</div>
+                          <div className="raw-label">Зашифровано (Base64, XSalsa20)</div>
+                          <div className="raw-value">{m.encryptedB64.slice(0, 64)}…</div>
+                          {m.expiresAt && (
+                            <>
+                              <div className="raw-label">Самоуничтожение</div>
+                              <div className="raw-value">{new Date(m.expiresAt).toLocaleString('ru')}</div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
             <div className="input-bar">
-              <input
-                className="msg-input"
-                placeholder="Введите сообщение… (зашифруется автоматически)"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-              />
-              <button className="send-btn" onClick={send} disabled={!input.trim()}>➤</button>
+              <div className="input-bar-row">
+                <div className="ttl-picker">
+                  {TTL_OPTIONS.map(opt => (
+                    <button
+                      key={opt.label}
+                      className={`ttl-btn ${ttlSeconds === opt.seconds ? 'active' : ''}`}
+                      onClick={() => setTtlSeconds(opt.seconds)}
+                      title={opt.seconds === 0 ? 'Без удаления' : `Удалить через ${opt.label}`}
+                    >
+                      {opt.seconds > 0 ? `⏱${opt.label}` : opt.label}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  className="msg-input"
+                  placeholder="Введите сообщение…"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+                />
+                <button className="send-btn" onClick={send} disabled={!input.trim()}>➤</button>
+              </div>
             </div>
           </div>
         )}

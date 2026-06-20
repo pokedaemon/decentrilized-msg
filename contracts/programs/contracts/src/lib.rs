@@ -6,7 +6,7 @@ declare_id!("5LcEFtx3EobismTJFxooSFYQeWp4AbdUgAixM9it9gBn");
 pub mod contracts {
     use super::*;
 
-    /// Регистрация пользователя: сохраняет публичные ключи в блокчейн.
+    /// Регистрация пользователя: публичные ключи сохраняются в блокчейн.
     /// Приватные ключи НИКОГДА не покидают устройство пользователя.
     pub fn register_user(
         ctx: Context<RegisterUser>,
@@ -24,17 +24,11 @@ pub mod contracts {
             owner: user.owner,
             registered_at: user.registered_at,
         });
-
-        msg!(
-            "User registered: {:?} at {}",
-            user.owner,
-            user.registered_at
-        );
         Ok(())
     }
 
-    /// Отправка сообщения: на блокчейн пишется только CID из IPFS.
-    /// Само зашифрованное сообщение хранится в IPFS, не в блокчейне.
+    /// Отправка сообщения: на блокчейн пишется только IPFS CID.
+    /// Само зашифрованное сообщение хранится в IPFS — не в блокчейне.
     pub fn send_message(
         ctx: Context<SendMessage>,
         ipfs_cid: String,
@@ -42,7 +36,7 @@ pub mod contracts {
     ) -> Result<()> {
         require!(ipfs_cid.len() <= 64, MessengerError::CidTooLong);
         require!(ttl_seconds > 0, MessengerError::InvalidTtl);
-        require!(ttl_seconds <= 604800, MessengerError::TtlTooLong); // max 7 дней
+        require!(ttl_seconds <= 604_800, MessengerError::TtlTooLong); // max 7 дней
 
         let clock = Clock::get()?;
         let msg_account = &mut ctx.accounts.message_account;
@@ -64,17 +58,10 @@ pub mod contracts {
             sent_at: msg_account.sent_at,
             expires_at: msg_account.expires_at,
         });
-
-        msg!(
-            "Message sent from {:?} to {:?}, CID stored, expires at {}",
-            msg_account.sender,
-            msg_account.recipient,
-            msg_account.expires_at
-        );
         Ok(())
     }
 
-    /// Подтверждение доставки: получатель сигнализирует что скачал и расшифровал.
+    /// Получатель подтверждает доставку после скачивания и расшифровки.
     pub fn mark_delivered(ctx: Context<MarkDelivered>) -> Result<()> {
         let msg_account = &mut ctx.accounts.message_account;
         require!(!msg_account.delivered, MessengerError::AlreadyDelivered);
@@ -93,12 +80,6 @@ pub mod contracts {
             recipient: msg_account.recipient,
             delivered_at: msg_account.delivered_at,
         });
-
-        msg!(
-            "Message delivered to {:?} at {}",
-            msg_account.recipient,
-            msg_account.delivered_at
-        );
         Ok(())
     }
 }
@@ -139,7 +120,7 @@ pub struct SendMessage<'info> {
     )]
     pub sender_account: Account<'info, UserAccount>,
 
-    /// Аккаунт получателя нужен только для получения его адреса
+    /// Нужен только для чтения адреса получателя — не изменяется
     pub recipient_account: Account<'info, UserAccount>,
 
     #[account(mut)]
@@ -159,7 +140,7 @@ pub struct MarkDelivered<'info> {
     pub recipient: Signer<'info>,
 }
 
-// ── Структуры данных ──────────────────────────────────────────────────────────
+// ── Данные аккаунтов ──────────────────────────────────────────────────────────
 
 #[account]
 pub struct UserAccount {
@@ -167,22 +148,20 @@ pub struct UserAccount {
     pub owner: Pubkey,
     /// X25519 публичный ключ для ECDH (обмен ключами)
     pub identity_pubkey: [u8; 32],
-    /// Signed Pre Key — ротируется раз в неделю
+    /// Signed Pre Key — ротируется периодически
     pub signed_pre_key: [u8; 32],
     pub registered_at: i64,
     pub message_count: u64,
 }
 
 impl UserAccount {
-    /// 32 (owner) + 32 (identity_pubkey) + 32 (signed_pre_key) + 8 + 8
+    /// 32 + 32 + 32 + 8 + 8
     pub const SIZE: usize = 32 + 32 + 32 + 8 + 8;
 }
 
 #[account]
 pub struct MessageAccount {
-    /// Кошелёк отправителя
     pub sender: Pubkey,
-    /// Кошелёк получателя
     pub recipient: Pubkey,
     /// IPFS CID зашифрованного сообщения (в блокчейне — только ссылка!)
     pub ipfs_cid: String,
@@ -193,11 +172,11 @@ pub struct MessageAccount {
 }
 
 impl MessageAccount {
-    /// 32 + 32 + (4+64) + 8 + 8 + 1 + 8
+    /// 32 + 32 + (4 + 64) + 8 + 8 + 1 + 8
     pub const SIZE: usize = 32 + 32 + (4 + 64) + 8 + 8 + 1 + 8;
 }
 
-// ── События (Events) ──────────────────────────────────────────────────────────
+// ── События ───────────────────────────────────────────────────────────────────
 
 #[event]
 pub struct UserRegistered {

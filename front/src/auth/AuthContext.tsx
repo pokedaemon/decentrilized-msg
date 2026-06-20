@@ -1,58 +1,73 @@
-// diploma/front/src/auth/AuthContext.tsx
-import React, {
-  createContext,
-  useState,
-  useEffect,
-  useCallback,
-  ReactNode,
-} from "react";
+import React, { createContext, useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import { generateKeyPair, keyPairFromSecretKey, toHex, toBase58, fingerprint } from '../crypto';
+
+export interface UserIdentity {
+  username: string;
+  peerId: string;
+  publicKeyHex: string;
+  secretKeyHex: string;
+  solanaAddress: string;
+  fingerprint: string;
+}
 
 interface AuthContextType {
-  isAuthenticated: boolean;
-  token: string | null;
-  login: (token: string) => void;
+  identity: UserIdentity | null;
+  register: (username: string, existingSecretKeyHex?: string) => UserIdentity;
   logout: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType>({
-  isAuthenticated: false,
-  token: null,
-  login: () => {},
+  identity: null,
+  register: () => { throw new Error('not ready'); },
   logout: () => {},
 });
 
-interface Props {
-  children: ReactNode;
+// sessionStorage: each browser tab gets its own identity (required for P2P demo)
+const STORAGE_KEY = 'dm-identity-v1';
+
+function buildIdentity(username: string, secretKeyHex?: string): UserIdentity {
+  const kp = secretKeyHex ? keyPairFromSecretKey(secretKeyHex) : generateKeyPair();
+  const pubHex = toHex(kp.publicKey);
+  const secHex = toHex(kp.secretKey);
+  return {
+    username,
+    peerId: pubHex.slice(0, 16),
+    publicKeyHex: pubHex,
+    secretKeyHex: secHex,
+    solanaAddress: toBase58(kp.publicKey),
+    fingerprint: fingerprint(kp.publicKey),
+  };
 }
 
-export const AuthProvider: React.FC<Props> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(null);
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [identity, setIdentity] = useState<UserIdentity | null>(null);
 
-  // Load token from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem("diploma-token");
-    if (stored) setToken(stored);
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        setIdentity(JSON.parse(stored));
+      } catch {
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
+    }
   }, []);
 
-  const login = useCallback((t: string) => {
-    localStorage.setItem("diploma-token", t);
-    setToken(t);
+  const register = useCallback((username: string, existingSecretKeyHex?: string): UserIdentity => {
+    const id = buildIdentity(username, existingSecretKeyHex);
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(id));
+    setIdentity(id);
+    return id;
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("diploma-token");
-    setToken(null);
+    sessionStorage.removeItem(STORAGE_KEY);
+    setIdentity(null);
   }, []);
 
   return (
-    <AuthContext.Provider
-      value={{
-        isAuthenticated: !!token,
-        token,
-        login,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{ identity, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

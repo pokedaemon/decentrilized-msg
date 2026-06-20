@@ -1,17 +1,13 @@
-// diploma/front/src/index.tsx
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { AuthProvider } from './auth/AuthContext';
+import App from './App';
+import './index.css';
 
-import React from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
-import { AuthProvider } from "./auth/AuthContext";
+const container = document.getElementById('root');
+if (!container) throw new Error('Root element not found');
 
-const container = document.getElementById("root");
-if (!container) {
-  throw new Error("Could not find root element");
-}
-
-const root = createRoot(container);
-root.render(
+createRoot(container).render(
   <React.StrictMode>
     <AuthProvider>
       <App />
